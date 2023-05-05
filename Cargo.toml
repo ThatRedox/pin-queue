@@ -1,0 +1,21 @@
+[package]
+name = "pin-queue"
+version = "0.1.0"
+edition = "2021"
+description = "An unbounded queue using pinned nodes"
+readme = "README.md"
+license = "Apache-2.0"
+categories = [
+    "no_std",
+    "queue",
+]
+
+[features]
+default = ["critical-section"]
+critical-section = ["dep:critical-section"]
+
+[dependencies]
+critical-section = { version = "1.1.1", optional = true }
+
+[dev-dependencies]
+critical-section = { version = "1.1.1", features = ["std"] }
