@@ -41,3 +41,5 @@ jobs:
       run: grcov . --binary-path target/debug/deps -s . -t lcov --branch --ignore-not-existing -o tests.lcov
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
