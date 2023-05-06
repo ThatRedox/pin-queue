@@ -394,9 +394,16 @@ mod test {
     extern crate std;
     use std::prelude::rust_2021::*;
 
+    /// No-op mutex for testing. This works since the tests are single-threaded.
+    #[derive(Default)]
+    struct TestMutex;
+    unsafe impl Mutex for TestMutex {
+        fn lock<R>(&self, f: impl FnOnce() -> R) -> R { f() }
+    }
+
     #[test]
     fn queue_smoke() {
-        let queue = Deque::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
+        let queue: Deque<TestMutex, u32> = Default::default();
         assert_eq!(queue.len(), 0);
         assert!(queue.is_empty());
 
@@ -429,13 +436,16 @@ mod test {
             assert_eq!(queue.pop_front().unwrap(), 1);
             assert_eq!(queue.len(), 0);
             assert!(queue.is_empty());
+
+            assert_eq!(queue.pop_front_clone(), None);
+            assert_eq!(queue.pop_back_clone(), None);
         }
         assert!(queue.is_empty());
     }
 
     #[test]
     fn queue_drop() {
-        let queue = Deque::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
+        let queue: Deque<TestMutex, u32> = Default::default();
         assert!(queue.is_empty());
 
         {
@@ -456,7 +466,7 @@ mod test {
 
     #[test]
     fn queue_many() {
-        let queue = Deque::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
+        let queue: Deque<TestMutex, u32> = Default::default();
         assert!(queue.is_empty());
 
         let mut nodes = Vec::new();

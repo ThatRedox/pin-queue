@@ -28,6 +28,29 @@ mod critical_section {
     impl Default for CriticalSectionMutex {
         fn default() -> Self { Self::new() }
     }
+
+    #[cfg(test)]
+    mod test {
+        use critical_section::RawRestoreState;
+        use crate::mutex::{CriticalSectionMutex, Mutex};
+
+        /// No-op implementation of critical section so the test can run
+        struct TestCS;
+        critical_section::set_impl!(TestCS);
+        unsafe impl critical_section::Impl for TestCS {
+            unsafe fn acquire() -> RawRestoreState {
+            }
+            unsafe fn release(_restore_state: RawRestoreState) {
+            }
+        }
+
+        #[test]
+        fn test_mutex() {
+            let mutex = CriticalSectionMutex::default();
+            let res = mutex.lock(|| 42);
+            assert_eq!(res, 42);
+        }
+    }
 }
 #[cfg(feature = "critical-section")]
 pub use crate::mutex::critical_section::CriticalSectionMutex;
