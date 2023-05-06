@@ -1,5 +1,8 @@
 # pin-queue
 
+[![Rust](https://github.com/ThatRedox/pin-queue/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/ThatRedox/pin-queue/actions/workflows/rust.yml)
+[![codecov](https://codecov.io/gh/ThatRedox/pin-queue/branch/master/graph/badge.svg?token=KRVE1PZK52)](https://codecov.io/gh/ThatRedox/pin-queue)
+
 An unbounded queue that doesn't require dynamic memory allocation.
 
 ## Example
