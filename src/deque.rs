@@ -390,20 +390,14 @@ impl <T> NodeInner<T> {
 mod test {
     use super::*;
     use core::pin::pin;
+    use crate::mutex::NoopMutex;
 
     extern crate std;
     use std::prelude::rust_2021::*;
 
-    /// No-op mutex for testing. This works since the tests are single-threaded.
-    #[derive(Default)]
-    struct TestMutex;
-    unsafe impl Mutex for TestMutex {
-        fn lock<R>(&self, f: impl FnOnce() -> R) -> R { f() }
-    }
-
     #[test]
     fn queue_smoke() {
-        let queue: Deque<TestMutex, u32> = Default::default();
+        let queue: Deque<NoopMutex, u32> = Default::default();
         assert_eq!(queue.len(), 0);
         assert!(queue.is_empty());
 
@@ -445,7 +439,7 @@ mod test {
 
     #[test]
     fn queue_drop() {
-        let queue: Deque<TestMutex, u32> = Default::default();
+        let queue: Deque<NoopMutex, u32> = Default::default();
         assert!(queue.is_empty());
 
         {
@@ -466,7 +460,7 @@ mod test {
 
     #[test]
     fn queue_many() {
-        let queue: Deque<TestMutex, u32> = Default::default();
+        let queue: Deque<NoopMutex, u32> = Default::default();
         assert!(queue.is_empty());
 
         let mut nodes = Vec::new();
@@ -494,8 +488,8 @@ mod test {
 
     #[test]
     fn queue_error() {
-        let queue1: Deque<TestMutex, u32> = Default::default();
-        let queue2: Deque<TestMutex, u32> = Default::default();
+        let queue1: Deque<NoopMutex, u32> = Default::default();
+        let queue2: Deque<NoopMutex, u32> = Default::default();
 
         {
             let mut node = pin!(queue1.new_node(1));
@@ -511,7 +505,7 @@ mod test {
 
     #[test]
     fn queue_option() {
-        let queue: Deque<TestMutex, Option<u32>> = Default::default();
+        let queue: Deque<NoopMutex, Option<u32>> = Default::default();
 
         {
             let mut node = queue.new_node(Some(0));
