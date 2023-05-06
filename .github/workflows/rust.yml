@@ -21,5 +21,12 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+      env:
+        RUSTFLAGS: '-C instrument-coverage'
+
+    - name: Generate coverage report
+      run: |
+        cargo install grcov &&
+        grcov . --binary-path target/debug/deps -s . -t lcov --branch --ignore-not-existing -o tests.lcov
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
