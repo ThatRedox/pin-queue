@@ -9,11 +9,11 @@
 //! # Example
 //! ```
 //! use pin_queue::mutex::CriticalSectionMutex;
-//! use pin_queue::queue::Queue;
+//! use pin_queue::Deque;
 //! use core::pin::pin;
 //!
 //! // Create a new queue of `u32`, using the `CriticalSectionMutex` mutex.
-//! let queue = Queue::<CriticalSectionMutex, u32>::new(CriticalSectionMutex::new());
+//! let queue = Deque::<CriticalSectionMutex, u32>::new(CriticalSectionMutex::new());
 //! {
 //!     // Create a node, and pin it to the stack.
 //!     let mut node = pin!(queue.new_node(1));
@@ -30,9 +30,9 @@
 //! # Note: The queue must live longer than it's nodes
 //! ``` compile_fail
 //! use pin_queue::mutex::CriticalSectionMutex;
-//! use pin_queue::queue::Queue;
+//! use pin_queue::Deque;
 //!
-//! let queue = Queue::<CriticalSectionMutex, u32>::default();
+//! let queue = Deque::<CriticalSectionMutex, u32>::default();
 //! let node = queue.new_node(1);
 //! drop(queue);
 //! ```
@@ -56,28 +56,28 @@ use crate::mutex::Mutex;
 use crate::error::{Error, Result};
 
 /// The root of the doubly-linked list queue.
-pub struct Queue<M: Mutex, T> {
+pub struct Deque<M: Mutex, T> {
     mutex: M,
-    inner: UnsafeCell<QueueInner<T>>,
+    inner: UnsafeCell<DequeInner<T>>,
 }
 
-unsafe impl <M: Mutex, T> Send for Queue<M, T> where M: Send, T: Send {}
-unsafe impl <M: Mutex, T> Sync for Queue<M, T> where M: Sync, T: Send {}
+unsafe impl <M: Mutex, T> Send for Deque<M, T> where M: Send, T: Send {}
+unsafe impl <M: Mutex, T> Sync for Deque<M, T> where M: Sync, T: Send {}
 
-struct QueueInner<T> {
+struct DequeInner<T> {
     size: usize,
     head: *mut NodeInner<T>,
     tail: *mut NodeInner<T>,
 }
 
-impl <M: Mutex, T> Default for Queue<M, T> where M: Default {
+impl <M: Mutex, T> Default for Deque<M, T> where M: Default {
     fn default() -> Self { Self::new(M::default()) }
 }
 
-impl <M: Mutex, T> Queue<M, T> {
+impl <M: Mutex, T> Deque<M, T> {
     pub const fn new(mutex: M) -> Self {
         Self {
-            mutex, inner: UnsafeCell::new(QueueInner {
+            mutex, inner: UnsafeCell::new(DequeInner {
                 size: 0,
                 head: core::ptr::null_mut(),
                 tail: core::ptr::null_mut(),
@@ -85,7 +85,7 @@ impl <M: Mutex, T> Queue<M, T> {
         }
     }
 
-    fn do_push<'a>(&'a self, mut node: Pin<&mut QueueNode<'a, M, T>>, push: impl FnOnce(Pin<&mut NodeInner<T>>)) -> Result<()> {
+    fn do_push<'a>(&'a self, mut node: Pin<&mut DequeNode<'a, M, T>>, push: impl FnOnce(Pin<&mut NodeInner<T>>)) -> Result<()> {
         if !core::ptr::eq(node.as_ref().queue, self) {
             return Err(Error::Attached);
         }
@@ -100,21 +100,21 @@ impl <M: Mutex, T> Queue<M, T> {
     }
 
     /// Push a node onto the front of the queue.
-    pub fn push_front<'a>(&'a self, node: Pin<&mut QueueNode<'a, M, T>>) -> Result<()> {
+    pub fn push_front<'a>(&'a self, node: Pin<&mut DequeNode<'a, M, T>>) -> Result<()> {
         self.do_push(node, |n| unsafe { n.push_front(self) })
     }
 
     /// Push a node onto the back of the queue.
-    pub fn push_back<'a>(&'a self, node: Pin<&mut QueueNode<'a, M, T>>) -> Result<()> {
+    pub fn push_back<'a>(&'a self, node: Pin<&mut DequeNode<'a, M, T>>) -> Result<()> {
         self.do_push(node, |n| unsafe { n.push_back(self) })
     }
 
     /// Pop a node from the front of the queue. This is the raw, unsafe version of this function
     /// which can directly act on a node's value.
     ///
-    /// * If `T` is Copy, consider [Queue::pop_front] instead.
-    /// * If `T` is Clone, consider [Queue::pop_front_clone] instead.
-    /// * If your queue is of `Option<T>` consider [Queue::take_front] instead.
+    /// * If `T` is Copy, consider [Deque::pop_front] instead.
+    /// * If `T` is Clone, consider [Deque::pop_front_clone] instead.
+    /// * If your queue is of `Option<T>` consider [Deque::take_front] instead.
     ///
     /// # Safety
     /// The function `f` is called with a mutable reference to the value, with the queue mutex held.
@@ -136,9 +136,9 @@ impl <M: Mutex, T> Queue<M, T> {
     /// Pop a node from the back of the queue.This is the raw, unsafe version of this function
     /// which can directly act on a node's value.
     ///
-    /// * If `T` is Copy, consider [Queue::pop_back] instead.
-    /// * If `T` is Clone, consider [Queue::pop_back_clone] instead.
-    /// * If your queue is of `Option<T>` consider [Queue::take_back] instead.
+    /// * If `T` is Copy, consider [Deque::pop_back] instead.
+    /// * If `T` is Clone, consider [Deque::pop_back_clone] instead.
+    /// * If your queue is of `Option<T>` consider [Deque::take_back] instead.
     ///
     /// # Safety
     /// The function `f` is called with a mutable reference to the value, with the queue mutex held.
@@ -174,12 +174,12 @@ impl <M: Mutex, T> Queue<M, T> {
 
     /// Create a node ready to be pinned and attached to this queue.
     #[must_use = "Node should be pinned and attached to the queue."]
-    pub fn new_node(&self, value: T) -> QueueNode<'_, M, T> {
-        QueueNode::new(self, value)
+    pub fn new_node(&self, value: T) -> DequeNode<'_, M, T> {
+        DequeNode::new(self, value)
     }
 }
 
-impl <M: Mutex, T> Queue<M, T> where T: Copy {
+impl <M: Mutex, T> Deque<M, T> where T: Copy {
     /// Pop a node from the front of the queue.
     pub fn pop_front(&self) -> Option<T> {
         unsafe { self.pop_front_raw(|v| *v) }
@@ -190,7 +190,7 @@ impl <M: Mutex, T> Queue<M, T> where T: Copy {
     }
 }
 
-impl <M: Mutex, T> Queue<M, T> where T: Clone {
+impl <M: Mutex, T> Deque<M, T> where T: Clone {
     /// Pop a node from the front of the queue and clone its value.
     pub fn pop_front_clone(&self) -> Option<T> {
         unsafe { self.pop_front_raw(|v| v.clone()) }
@@ -201,7 +201,7 @@ impl <M: Mutex, T> Queue<M, T> where T: Clone {
     }
 }
 
-impl <M: Mutex, T> Queue<M, Option<T>> {
+impl <M: Mutex, T> Deque<M, Option<T>> {
     /// Pop a node from the front of the queue and take its value replacing it with `None`.
     pub fn take_front(&self) -> Option<Option<T>> {
         unsafe { self.pop_front_raw(|v| v.take()) }
@@ -212,14 +212,14 @@ impl <M: Mutex, T> Queue<M, Option<T>> {
     }
 }
 
-/// An individual node in a queue. To create a node, see [Queue::new_node].
-pub struct QueueNode<'a, M: Mutex, T> {
-    queue: &'a Queue<M, T>,
+/// An individual node in a queue. To create a node, see [Deque::new_node].
+pub struct DequeNode<'a, M: Mutex, T> {
+    queue: &'a Deque<M, T>,
     inner: NodeInner<T>,
 }
 
-impl <'a, M: Mutex, T> QueueNode<'a, M, T> {
-    fn new(queue: &'a Queue<M, T>, value: T) -> QueueNode<'a, M, T> {
+impl <'a, M: Mutex, T> DequeNode<'a, M, T> {
+    fn new(queue: &'a Deque<M, T>, value: T) -> DequeNode<'a, M, T> {
         Self {
             queue,
             inner: NodeInner {
@@ -268,9 +268,9 @@ impl <'a, M: Mutex, T> QueueNode<'a, M, T> {
     /// The function `f` is called with a mutable reference to the value, with the queue mutex held.
     /// The caller must take care to ensure all the requirements of the mutex are met.
     ///
-    /// * If you want to replace the value inside this node, consider using [QueueNode::replace_pin] instead.
-    /// * If you want the value and `T` implements `Copy`, consider using [QueueNode::value] instead.
-    /// * If you want the value and `T` implements `Clone`, consider using [QueueNode::value_clone] instead.
+    /// * If you want to replace the value inside this node, consider using [DequeNode::replace_pin] instead.
+    /// * If you want the value and `T` implements `Copy`, consider using [DequeNode::value] instead.
+    /// * If you want the value and `T` implements `Clone`, consider using [DequeNode::value_clone] instead.
     pub unsafe fn mutate<R>(mut self: Pin<&mut Self>, f: impl FnOnce(&mut T) -> R) -> R {
         self.queue.mutex.lock(|| {
             f(unsafe { self.as_mut().get_inner().get_value() })
@@ -278,21 +278,21 @@ impl <'a, M: Mutex, T> QueueNode<'a, M, T> {
     }
 }
 
-impl <'a, M: Mutex, T> Drop for QueueNode<'a, M, T> {
+impl <'a, M: Mutex, T> Drop for DequeNode<'a, M, T> {
     fn drop(&mut self) {
         // Safety: We know we are never using this value again after being dropped
         unsafe { Pin::new_unchecked(self) }.detach();
     }
 }
 
-impl <'a, M: Mutex, T> QueueNode<'a, M, T> where T: Copy {
+impl <'a, M: Mutex, T> DequeNode<'a, M, T> where T: Copy {
     /// Get a copy of the value inside this node.
     pub fn value(self: Pin<&mut Self>) -> T {
         unsafe { self.mutate(|v| *v) }
     }
 }
 
-impl <'a, M: Mutex, T> QueueNode<'a, M, T> where T: Clone {
+impl <'a, M: Mutex, T> DequeNode<'a, M, T> where T: Clone {
     /// Get a clone of the value inside this node.
     pub fn value_clone(self: Pin<&mut Self>) -> T {
         unsafe { self.mutate(|v| v.clone()) }
@@ -311,7 +311,7 @@ struct NodeInner<T> {
 impl <T> NodeInner<T> {
     /// Attach this node to the end of a queue. The node MUST not be attached to another queue.
     /// The queue mutex MUST be locked before calling.
-    pub unsafe fn push_back<M: Mutex>(mut self: Pin<&mut NodeInner<T>>, queue: &Queue<M, T>) {
+    pub unsafe fn push_back<M: Mutex>(mut self: Pin<&mut NodeInner<T>>, queue: &Deque<M, T>) {
         let self_ref = self.as_mut().get_unchecked_mut();
         self_ref.attached = true;
 
@@ -332,7 +332,7 @@ impl <T> NodeInner<T> {
 
     /// Attach this node to the front of a queue. The node MUST not be attached to another queue.
     /// The queue mutex MUST be locked before calling.
-    pub unsafe fn push_front<M: Mutex>(mut self: Pin<&mut NodeInner<T>>, queue: &Queue<M, T>) {
+    pub unsafe fn push_front<M: Mutex>(mut self: Pin<&mut NodeInner<T>>, queue: &Deque<M, T>) {
         let self_ref = self.as_mut().get_unchecked_mut();
         self_ref.attached = true;
 
@@ -352,7 +352,7 @@ impl <T> NodeInner<T> {
     }
 
     /// Detach this struct from a queue. The queue mutex MUST be locked before calling.
-    pub unsafe fn detach<M: Mutex>(mut self: Pin<&mut NodeInner<T>>, queue: &Queue<M, T>) {
+    pub unsafe fn detach<M: Mutex>(mut self: Pin<&mut NodeInner<T>>, queue: &Deque<M, T>) {
         let self_ref = self.as_mut().get_unchecked_mut();
         let inner = queue.inner.get().as_mut().unwrap();
         inner.size -= 1;
@@ -396,7 +396,7 @@ mod test {
 
     #[test]
     fn queue_smoke() {
-        let queue = Queue::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
+        let queue = Deque::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
         assert_eq!(queue.len(), 0);
         assert!(queue.is_empty());
 
@@ -435,7 +435,7 @@ mod test {
 
     #[test]
     fn queue_drop() {
-        let queue = Queue::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
+        let queue = Deque::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
         assert!(queue.is_empty());
 
         {
@@ -456,7 +456,7 @@ mod test {
 
     #[test]
     fn queue_many() {
-        let queue = Queue::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
+        let queue = Deque::<crate::mutex::CriticalSectionMutex, u32>::new(Default::default());
         assert!(queue.is_empty());
 
         let mut nodes = Vec::new();

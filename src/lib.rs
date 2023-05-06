@@ -3,8 +3,8 @@
 
 extern crate alloc;
 
-pub mod queue;
+pub mod deque;
 pub mod mutex;
 pub mod error;
 
-pub use queue::Queue;
+pub use deque::Deque;

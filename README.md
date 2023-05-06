@@ -5,11 +5,11 @@ An unbounded queue that doesn't require dynamic memory allocation.
 ## Example
 ```rust
 use pin_queue::mutex::CriticalSectionMutex;
-use pin_queue::Queue;
+use pin_queue::Deque;
 use core::pin::pin;
 
 // Create a new queue of `u32`, using the `CriticalSectionMutex` mutex.
-let queue = Queue::<CriticalSectionMutex, u32>::new(CriticalSectionMutex::new());
+let queue = Deque::<CriticalSectionMutex, u32>::new(CriticalSectionMutex::new());
 {
     // Create a node, and pin it to the stack.
     let mut node = pin!(queue.new_node(1));
@@ -30,7 +30,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
