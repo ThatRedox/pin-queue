@@ -24,21 +24,18 @@ jobs:
         RUSTFLAGS: '-C instrument-coverage -C codegen-units=1 -C inline-threshold=0 -Coverflow-checks=off'
 
     - name: Install toolchain
-      id: toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: x86_64-unknown-linux-musl
-        override: true
-        components: llvm-tools-preview
+      run: |
+        rustup component add llvm-tools-preview
     - name: Download grcov
       run: |
         mkdir -p "${HOME}/.local/bin"
         curl -sL https://github.com/mozilla/grcov/releases/download/v0.8.18/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar jxf - -C "${HOME}/.local/bin"
         echo "$HOME/.local/bin" >> $GITHUB_PATH
     - name: Generate coverage report
-      run: grcov . --binary-path target/debug/deps -s . -t lcov --branch --ignore-not-existing -o tests.lcov
+      run: grcov . --binary-path target/debug/deps -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o target/coverage/tests.lcov
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+        directory: ./target/coverage/
+        verbose: true
