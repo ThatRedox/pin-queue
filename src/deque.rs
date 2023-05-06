@@ -491,4 +491,47 @@ mod test {
         drop(nodes);
         assert!(queue.is_empty());
     }
+
+    #[test]
+    fn queue_error() {
+        let queue1: Deque<TestMutex, u32> = Default::default();
+        let queue2: Deque<TestMutex, u32> = Default::default();
+
+        {
+            let mut node = pin!(queue1.new_node(1));
+            assert_eq!(queue2.push_back(node.as_mut()), Err(Error::Attached));
+            assert_eq!(queue2.push_front(node.as_mut()), Err(Error::Attached));
+
+            queue1.push_back(node.as_mut()).unwrap();
+
+            assert_eq!(queue1.push_back(node.as_mut()), Err(Error::Attached));
+            assert_eq!(queue1.push_front(node.as_mut()), Err(Error::Attached));
+        }
+    }
+
+    #[test]
+    fn queue_option() {
+        let queue: Deque<TestMutex, Option<u32>> = Default::default();
+
+        {
+            let mut node = queue.new_node(Some(0));
+            assert_eq!(node.replace(Some(1)), Some(0));
+            let mut node = pin!(node);
+
+            queue.push_back(node.as_mut()).unwrap();
+            assert_eq!(queue.len(), 1);
+            assert_eq!(queue.take_front(), Some(Some(1)));
+            assert_eq!(queue.len(), 0);
+            assert_eq!(node.as_mut().value(), None);
+            assert_eq!(node.as_mut().value_clone(), None);
+
+            assert_eq!(node.as_mut().replace_pin(Some(2)), None);
+
+            queue.push_back(node.as_mut()).unwrap();
+            assert_eq!(queue.len(), 1);
+            assert_eq!(queue.take_back(), Some(Some(2)));
+            assert_eq!(queue.len(), 0);
+            assert_eq!(node.as_mut().value(), None);
+        }
+    }
 }
