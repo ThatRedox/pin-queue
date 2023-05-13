@@ -1,17 +1,29 @@
 //! The mutex trait used by the queue.
 
+use core::marker::PhantomData;
+
+#[cfg(feature = "critical-section")]
+pub use crate::mutex::critical_section::CriticalSectionMutex;
+
+#[cfg(feature = "parking_lot")]
+pub use crate::mutex::parking_lot::ParkingLotMutex;
+
 /// The raw mutex trait.
 ///
 /// # Safety
-/// This is declared as `unsafe` since the `lock` function must call the passed function in a
-/// critical section.
+/// Implementations must ensure that, while locked, no other thread can lock concurrently.
+///
+/// * The mutex may or may not be reentrant (but is recommended).
+/// * The mutex may or may not be fair (but is recommended).
+/// * The mutex may or may not be poisoned (but it is recommended not to poison on panic since it
+///   may lead to an abort).
 pub unsafe trait Mutex {
     fn lock<R>(&self, f: impl FnOnce() -> R) -> R;
 }
 
 /// A no-op mutex for single-threaded applications. It does not implement `Send` or `Sync` so
 /// it cannot be sent between threads. If you need a thread-safe mutex, consider using the
-/// `critical-section` feature.
+/// `critical-section` or `parking_lot` features.
 ///
 /// ``` compile_fail
 /// use pin_queue::mutex::NoopMutex;
@@ -41,7 +53,7 @@ mod test {
     use crate::mutex::{NoopMutex, Mutex};
 
     #[test]
-    fn test_mutex() {
+    fn test_noop_mutex() {
         let mutex = NoopMutex::default();
         let res = mutex.lock(|| 42);
         assert_eq!(res, 42);
@@ -73,7 +85,7 @@ mod critical_section {
         use crate::mutex::{CriticalSectionMutex, Mutex};
 
         #[test]
-        fn test_mutex() {
+        fn test_critical_section_mutex() {
             let mutex = CriticalSectionMutex::default();
             let res = mutex.lock(|| 42);
             assert_eq!(res, 42);
@@ -81,6 +93,42 @@ mod critical_section {
     }
 }
 
-use core::marker::PhantomData;
-#[cfg(feature = "critical-section")]
-pub use crate::mutex::critical_section::CriticalSectionMutex;
+#[cfg(feature = "parking_lot")]
+mod parking_lot {
+    use super::Mutex;
+
+    /// A simple `Mutex` using `parking_lot::ReentrantMutex`
+    pub struct ParkingLotMutex {
+        inner: parking_lot::ReentrantMutex<()>,
+    }
+    unsafe impl Mutex for ParkingLotMutex {
+        fn lock<R>(&self, f: impl FnOnce() -> R) -> R {
+            let _guard = self.inner.lock();
+            f()
+        }
+    }
+    unsafe impl Send for ParkingLotMutex {}
+    unsafe impl Sync for ParkingLotMutex {}
+    impl ParkingLotMutex {
+        pub const fn new() -> Self {
+            Self {
+                inner: parking_lot::ReentrantMutex::new(())
+            }
+        }
+    }
+    impl Default for ParkingLotMutex {
+        fn default() -> Self { Self::new() }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::mutex::{ParkingLotMutex, Mutex};
+
+        #[test]
+        fn test_parking_lot_mutex() {
+            let mutex = ParkingLotMutex::default();
+            let res = mutex.lock(|| 42);
+            assert_eq!(res, 42);
+        }
+    }
+}

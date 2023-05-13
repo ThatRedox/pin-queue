@@ -5,17 +5,22 @@ edition = "2021"
 description = "An unbounded queue using pinned nodes"
 readme = "README.md"
 license = "Apache-2.0"
+repository = "https://github.com/ThatRedox/pin-queue/"
 categories = [
-    "no_std",
-    "queue",
+    "no-std",
+    "data-structures",
+    "concurrency",
 ]
 
 [features]
 default = ["critical-section"]
 critical-section = ["dep:critical-section"]
+parking_lot = ["dep:parking_lot"]
 
 [dependencies]
 critical-section = { version = "1.1.1", optional = true }
+parking_lot = { version = "0.12.1", optional = true }
 
 [dev-dependencies]
 critical-section = { version = "1.1.1", features = ["std"] }
+parking_lot = "0.12.1"
