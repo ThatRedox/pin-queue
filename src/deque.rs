@@ -20,7 +20,7 @@
 //!     // Push the node onto the queue.
 //!     queue.push_back(node.as_mut()).unwrap();
 //!     // Pop our node off the queue.
-//!     assert_eq!(queue.pop_front().unwrap(), 1);
+//!     assert_eq!(queue.pop_front_copy().unwrap(), 1);
 //!     // Push our node back onto the queue.
 //!     queue.push_back(node.as_mut()).unwrap();
 //! } // Node gets dropped and automatically removed from the queue
@@ -109,17 +109,14 @@ impl <M: Mutex, T> Deque<M, T> {
         self.do_push(node, |n| unsafe { n.push_back(self) })
     }
 
-    /// Pop a node from the front of the queue. This is the raw, unsafe version of this function
-    /// which can directly act on a node's value.
+    /// Pop a node from the front of the queue and call `f` on it. This will return `None` if the
+    /// queue was empty, and `Some(R)` if the queue was not empty, where `R` is the return value
+    /// of `f`. Note that this will lock the queue for the duration of the call to `f`.
     ///
-    /// * If `T` is Copy, consider [Deque::pop_front] instead.
+    /// * If `T` is Copy, consider [Deque::pop_front_copy] instead.
     /// * If `T` is Clone, consider [Deque::pop_front_clone] instead.
     /// * If your queue is of `Option<T>` consider [Deque::take_front] instead.
-    ///
-    /// # Safety
-    /// The function `f` is called with a mutable reference to the value, with the queue mutex held.
-    /// The caller must take care to ensure all the requirements of the mutex are met.
-    pub unsafe fn pop_front_raw<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
+    pub fn pop_front<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
         self.mutex.lock(|| {
             // Safety: inner is always valid
             let inner = unsafe { self.inner.get().as_mut().unwrap() };
@@ -133,17 +130,14 @@ impl <M: Mutex, T> Deque<M, T> {
         })
     }
 
-    /// Pop a node from the back of the queue.This is the raw, unsafe version of this function
-    /// which can directly act on a node's value.
+    /// Pop a node from the back of the queue and call `f` on it. This will return `None` if the
+    /// queue was empty, and `Some(R)` if the queue was not empty, where `R` is the return value
+    /// of `f`. Note that this will lock the queue for the duration of the call to `f`.
     ///
-    /// * If `T` is Copy, consider [Deque::pop_back] instead.
+    /// * If `T` is Copy, consider [Deque::pop_back_copy] instead.
     /// * If `T` is Clone, consider [Deque::pop_back_clone] instead.
     /// * If your queue is of `Option<T>` consider [Deque::take_back] instead.
-    ///
-    /// # Safety
-    /// The function `f` is called with a mutable reference to the value, with the queue mutex held.
-    /// The caller must take care to ensure all the requirements of the mutex are met.
-    pub unsafe fn pop_back_raw<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
+    pub fn pop_back<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
         self.mutex.lock(|| {
             // Safety: inner is always valid
             let inner = unsafe { self.inner.get().as_mut().unwrap() };
@@ -181,34 +175,34 @@ impl <M: Mutex, T> Deque<M, T> {
 
 impl <M: Mutex, T> Deque<M, T> where T: Copy {
     /// Pop a node from the front of the queue.
-    pub fn pop_front(&self) -> Option<T> {
-        unsafe { self.pop_front_raw(|v| *v) }
+    pub fn pop_front_copy(&self) -> Option<T> {
+        self.pop_front(|v| *v)
     }
     /// Pop a node from the back of the queue.
-    pub fn pop_back(&self) -> Option<T> {
-        unsafe { self.pop_back_raw(|v| *v) }
+    pub fn pop_back_copy(&self) -> Option<T> {
+        self.pop_back(|v| *v)
     }
 }
 
 impl <M: Mutex, T> Deque<M, T> where T: Clone {
     /// Pop a node from the front of the queue and clone its value.
     pub fn pop_front_clone(&self) -> Option<T> {
-        unsafe { self.pop_front_raw(|v| v.clone()) }
+        self.pop_front(|v| v.clone())
     }
     /// Pop a node from the back of the queue and clone its value.
     pub fn pop_back_clone(&self) -> Option<T> {
-        unsafe { self.pop_back_raw(|v| v.clone()) }
+        self.pop_back(|v| v.clone())
     }
 }
 
 impl <M: Mutex, T> Deque<M, Option<T>> {
     /// Pop a node from the front of the queue and take its value replacing it with `None`.
     pub fn take_front(&self) -> Option<Option<T>> {
-        unsafe { self.pop_front_raw(|v| v.take()) }
+        self.pop_front(|v| v.take())
     }
     /// Pop a node from the back of the queue and take its value replacing it with `None`.
     pub fn take_back(&self) -> Option<Option<T>> {
-        unsafe { self.pop_back_raw(|v| v.take()) }
+        self.pop_back(|v| v.take())
     }
 }
 
@@ -259,19 +253,16 @@ impl <'a, M: Mutex, T> DequeNode<'a, M, T> {
     /// Replace the value of this node with a new value and return the old value. This operates
     /// on a node that has been pinned.
     pub fn replace_pin(self: Pin<&mut Self>, value: T) -> T {
-        unsafe { self.mutate(|v| core::mem::replace(v, value)) }
+        self.mutate(|v| core::mem::replace(v, value))
     }
 
-    /// Mutate the value of this node in-place.
-    ///
-    /// # Safety
-    /// The function `f` is called with a mutable reference to the value, with the queue mutex held.
-    /// The caller must take care to ensure all the requirements of the mutex are met.
+    /// Mutate the value of this node in-place. This locks the queue and calls `f` with a
+    /// mutable reference to the value of this node and returns the result.
     ///
     /// * If you want to replace the value inside this node, consider using [DequeNode::replace_pin] instead.
     /// * If you want the value and `T` implements `Copy`, consider using [DequeNode::value] instead.
     /// * If you want the value and `T` implements `Clone`, consider using [DequeNode::value_clone] instead.
-    pub unsafe fn mutate<R>(mut self: Pin<&mut Self>, f: impl FnOnce(&mut T) -> R) -> R {
+    pub fn mutate<R>(mut self: Pin<&mut Self>, f: impl FnOnce(&mut T) -> R) -> R {
         self.queue.mutex.lock(|| {
             f(unsafe { self.as_mut().get_inner().get_value() })
         })
@@ -288,14 +279,14 @@ impl <'a, M: Mutex, T> Drop for DequeNode<'a, M, T> {
 impl <'a, M: Mutex, T> DequeNode<'a, M, T> where T: Copy {
     /// Get a copy of the value inside this node.
     pub fn value(self: Pin<&mut Self>) -> T {
-        unsafe { self.mutate(|v| *v) }
+        self.mutate(|v| *v)
     }
 }
 
 impl <'a, M: Mutex, T> DequeNode<'a, M, T> where T: Clone {
     /// Get a clone of the value inside this node.
     pub fn value_clone(self: Pin<&mut Self>) -> T {
-        unsafe { self.mutate(|v| v.clone()) }
+        self.mutate(|v| v.clone())
     }
 }
 
@@ -421,13 +412,13 @@ mod test {
             assert_eq!(queue.push_back(node.as_mut()), Err(Error::Attached));
             assert_eq!(queue.len(), 3);
 
-            assert_eq!(queue.pop_back().unwrap(), 2);
+            assert_eq!(queue.pop_back_copy().unwrap(), 2);
             assert_eq!(queue.len(), 2);
 
-            assert_eq!(queue.pop_front().unwrap(), 3);
+            assert_eq!(queue.pop_front_copy().unwrap(), 3);
             assert_eq!(queue.len(), 1);
 
-            assert_eq!(queue.pop_front().unwrap(), 1);
+            assert_eq!(queue.pop_front_copy().unwrap(), 1);
             assert_eq!(queue.len(), 0);
             assert!(queue.is_empty());
 
@@ -472,7 +463,7 @@ mod test {
 
         assert_eq!(queue.len(), 1_000_000);
         for i in 0..1_000_000 {
-            let v = queue.pop_front().unwrap();
+            let v = queue.pop_front_copy().unwrap();
             assert_eq!(v, i);
         }
 

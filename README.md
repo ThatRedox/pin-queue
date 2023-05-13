@@ -19,7 +19,7 @@ let queue = Deque::<CriticalSectionMutex, u32>::new(CriticalSectionMutex::new())
     // Push the node onto the queue.
     queue.push_back(node.as_mut()).unwrap();
     // Pop our node off the queue.
-    assert_eq!(queue.pop_front().unwrap(), 1);
+    assert_eq!(queue.pop_front_copy().unwrap(), 1);
     // Push our node back onto the queue.
     queue.push_back(node.as_mut()).unwrap();
 } // Node gets dropped and automatically removed from the queue
