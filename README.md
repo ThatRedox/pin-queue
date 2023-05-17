@@ -1,7 +1,9 @@
 # pin-queue
 
-[![Rust](https://github.com/ThatRedox/pin-queue/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/ThatRedox/pin-queue/actions/workflows/rust.yml)
-[![codecov](https://codecov.io/gh/ThatRedox/pin-queue/branch/master/graph/badge.svg?token=KRVE1PZK52)](https://codecov.io/gh/ThatRedox/pin-queue)
+[![Build](https://img.shields.io/github/actions/workflow/status/ThatRedox/pin-queue/rust.yml?style=for-the-badge)](https://github.com/ThatRedox/pin-queue/actions/workflows/rust.yml)
+[![Codecov](https://img.shields.io/codecov/c/github/ThatRedox/pin-queue?style=for-the-badge)](https://codecov.io/gh/ThatRedox/pin-queue)
+[![Crates.io](https://img.shields.io/crates/d/pin-queue?style=for-the-badge)](https://crates.io/crates/pin-queue)
+[![docs.rs](https://img.shields.io/docsrs/pin-queue?style=for-the-badge)](https://docs.rs/pin-queue)
 
 An unbounded queue that doesn't require dynamic memory allocation.
 
