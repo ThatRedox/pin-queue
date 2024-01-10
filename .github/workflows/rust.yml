@@ -18,20 +18,20 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Run tests
+      run: cargo test --verbose --all-features
+      env:
+        RUSTFLAGS: '-C instrument-coverage -C codegen-units=1 -C inline-threshold=0 -Coverflow-checks=off'
+
     - name: Install Miri
       run:
-        rustup toolchain install nightly --component miri
-        rustup override set nightly
+        rustup toolchain install nightly-2024-01-10 --component miri
+        rustup override set nightly-2024-01-10
         cargo miri setup
         cargo clean
     
     - name: Run tests with Miri
       run: cargo miri test --verbose --all-features
-
-    - name: Run tests
-      run: cargo test --verbose --all-features
-      env:
-        RUSTFLAGS: '-C instrument-coverage -C codegen-units=1 -C inline-threshold=0 -Coverflow-checks=off'
 
     - name: Install toolchain
       run: |
