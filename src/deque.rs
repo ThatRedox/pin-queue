@@ -51,6 +51,7 @@
 //!
 
 use core::cell::UnsafeCell;
+use core::marker::PhantomPinned;
 use core::pin::Pin;
 use crate::mutex::Mutex;
 use crate::error::{Error, Result};
@@ -220,6 +221,7 @@ impl <'a, M: Mutex, T> DequeNode<'a, M, T> {
                 value, attached: false,
                 next: core::ptr::null_mut(),
                 prev: core::ptr::null_mut(),
+                _pin: PhantomPinned,
             }
         }
     }
@@ -297,6 +299,7 @@ struct NodeInner<T> {
     attached: bool,
     next: *mut NodeInner<T>,
     prev: *mut NodeInner<T>,
+    _pin: PhantomPinned,
 }
 
 impl <T> NodeInner<T> {
@@ -451,18 +454,24 @@ mod test {
 
     #[test]
     fn queue_many() {
+        // Miri is too slow to run 1 items
+        #[cfg(miri)]
+        const TEST_COUNT: u32 = 1_000;
+        #[cfg(not(miri))]
+        const TEST_COUNT: u32 = 1_000_000;
+
         let queue: Deque<NoopMutex, u32> = Default::default();
         assert!(queue.is_empty());
 
         let mut nodes = Vec::new();
-        for i in 0..1_000_000 {
+        for i in 0..TEST_COUNT {
             let mut node = Box::pin(queue.new_node(i));
             queue.push_back(node.as_mut()).unwrap();
             nodes.push(node);
         }
 
-        assert_eq!(queue.len(), 1_000_000);
-        for i in 0..1_000_000 {
+        assert_eq!(queue.len(), TEST_COUNT as usize);
+        for i in 0..TEST_COUNT {
             let v = queue.pop_front_copy().unwrap();
             assert_eq!(v, i);
         }
@@ -472,7 +481,7 @@ mod test {
             queue.push_front(node.as_mut()).unwrap();
         }
 
-        assert_eq!(queue.len(), 1_000_000);
+        assert_eq!(queue.len(), TEST_COUNT as usize);
         drop(nodes);
         assert!(queue.is_empty());
     }
