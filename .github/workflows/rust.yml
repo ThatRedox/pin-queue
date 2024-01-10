@@ -24,14 +24,18 @@ jobs:
         RUSTFLAGS: '-C instrument-coverage -C codegen-units=1 -C inline-threshold=0 -Coverflow-checks=off'
 
     - name: Install Miri
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        components: miri
+
+    - name: Setup Miri
       run:
-        rustup toolchain install nightly-2024-01-10 --component miri
-        rustup override set nightly-2024-01-10
-        cargo miri setup
-        cargo clean
+        cargo +nightly miri setup
+        cargo +nightly clean
     
     - name: Run tests with Miri
-      run: cargo miri test --verbose --all-features
+      run: cargo +nightly miri test --verbose --all-features
 
     - name: Install toolchain
       run: |
