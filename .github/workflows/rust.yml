@@ -23,21 +23,7 @@ jobs:
       env:
         RUSTFLAGS: '-C instrument-coverage -C codegen-units=1 -C inline-threshold=0 -Coverflow-checks=off'
 
-    - name: Install Miri
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: nightly
-        components: miri
-
-    - name: Setup Miri
-      run: |
-        cargo +nightly clean
-        cargo +nightly miri setup
-    
-    - name: Run tests with Miri
-      run: cargo +nightly miri test --verbose --all-features
-
-    - name: Install toolchain
+    - name: Install llvm tools
       run: |
         rustup component add llvm-tools-preview
     - name: Download grcov
@@ -55,3 +41,17 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         directory: ./target/coverage/
         verbose: true
+
+    - name: Install Miri
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly
+        components: miri
+
+    - name: Setup Miri
+      run: |
+        cargo +nightly clean
+        cargo +nightly miri setup
+    
+    - name: Run tests with Miri
+      run: cargo +nightly miri test --verbose --all-features
