@@ -82,7 +82,7 @@ mod critical_section {
 
         #[test]
         fn test_critical_section_mutex() {
-            let mutex = CriticalSectionMutex::default();
+            let mutex = CriticalSectionMutex;
             let res = mutex.lock(|| 42);
             assert_eq!(res, 42);
         }
