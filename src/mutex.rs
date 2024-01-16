@@ -69,11 +69,8 @@ mod critical_section {
     }
     unsafe impl Send for CriticalSectionMutex {}
     unsafe impl Sync for CriticalSectionMutex {}
-    impl CriticalSectionMutex {
-        pub const fn new() -> Self { Self }
-    }
     impl Default for CriticalSectionMutex {
-        fn default() -> Self { Self::new() }
+        fn default() -> Self { Self }
     }
 
     #[cfg(test)]
@@ -85,6 +82,10 @@ mod critical_section {
             let mutex = CriticalSectionMutex;
             let res = mutex.lock(|| 42);
             assert_eq!(res, 42);
+
+            let mutex: CriticalSectionMutex = Default::default();
+            let res  = mutex.lock(|| 21);
+            assert_eq!(res, 21);
         }
     }
 }
