@@ -7,27 +7,6 @@
 
 An unbounded queue that doesn't require dynamic memory allocation.
 
-## Example
-```rust
-use pin_queue::mutex::CriticalSectionMutex;
-use pin_queue::Deque;
-use core::pin::pin;
-
-// Create a new queue of `u32`, using the `CriticalSectionMutex` mutex.
-let queue = Deque::<CriticalSectionMutex, u32>::new(CriticalSectionMutex::new());
-{
-    // Create a node, and pin it to the stack.
-    let mut node = pin!(queue.new_node(1));
-    // Push the node onto the queue.
-    queue.push_back(node.as_mut()).unwrap();
-    // Pop our node off the queue.
-    assert_eq!(queue.pop_front_copy().unwrap(), 1);
-    // Push our node back onto the queue.
-    queue.push_back(node.as_mut()).unwrap();
-} // Node gets dropped and automatically removed from the queue
-assert!(queue.is_empty());
-```
-
 # License
 Copyright 2023 ThatRedox
 

@@ -11,12 +11,8 @@ pub use crate::mutex::parking_lot::ParkingLotMutex;
 /// The raw mutex trait.
 ///
 /// # Safety
-/// Implementations must ensure that, while locked, no other thread can lock concurrently.
-///
-/// * The mutex may or may not be reentrant (but is recommended).
-/// * The mutex may or may not be fair (but is recommended).
-/// * The mutex may or may not be poisoned (but it is recommended not to poison on panic since it
-///   may lead to an abort).
+/// Implementations must ensure that, while locked, no other thread can lock concurrently. Mutexes may
+/// be reentrant.
 pub unsafe trait Mutex {
     fn lock<R>(&self, f: impl FnOnce() -> R) -> R;
 }
