@@ -241,6 +241,19 @@ impl <'a, M: Mutex, T> DequeNode<'a, M, T> {
         });
     }
 
+    /// Replace the value of this node with a new value and return the old value. This operates
+    /// on a node that has not been pinned.
+    pub fn replace(&mut self, value: T) -> T {
+        let mut inner = self.inner.data.borrow_mut();
+        core::mem::replace(&mut inner.value, value)
+    }
+
+    /// Replace the value of this node with a new value and return the old value. This operates
+    /// on a node that has been pinned.
+    pub fn replace_pin(self: Pin<&mut Self>, value: T) -> T {
+        self.mutate(|v| core::mem::replace(v, value))
+    }
+
     /// Mutate the value stored in this node.
     pub fn mutate<R>(self: Pin<&mut Self>, function: impl FnOnce(&mut T) -> R) -> R {
         self.queue.mutex.lock(|| unsafe {
@@ -391,6 +404,20 @@ impl <M: Mutex, T> Deque<M, Option<T>> {
     }
 }
 
+impl <'a, M: Mutex, T> DequeNode<'a, M, T> where T: Copy {
+    /// Get a copy of the value inside this node.
+    pub fn value(self: Pin<&mut Self>) -> T {
+        self.mutate(|v| *v)
+    }
+}
+
+impl <'a, M: Mutex, T> DequeNode<'a, M, T> where T: Clone {
+    /// Get a clone of the value inside this node.
+    pub fn value_clone(self: Pin<&mut Self>) -> T {
+        self.mutate(|v| v.clone())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -514,7 +541,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(any())]
     fn queue_option() {
         let queue: Deque<NoopMutex, Option<u32>> = Default::default();
 
