@@ -20,7 +20,7 @@ pub enum Side {
 
 /// A cursor of a deque
 pub struct Cursor<'a, 'b, M: Mutex, T> {
-    deque: &'a Deque<M, T>,
+    queue: &'a Deque<M, T>,
     inner: &'a mut DequeInner<T>,
     prev: *const NodeInner<T>,
     next: *const NodeInner<T>,
@@ -32,7 +32,7 @@ impl <'a, 'b, M: Mutex, T> Cursor<'a, 'b, M, T> {
         Self {
             prev: core::ptr::null(),
             next: inner.head,
-            inner, deque,
+            inner, queue: deque,
             _phantom: PhantomData,
         }
     }
@@ -41,8 +41,22 @@ impl <'a, 'b, M: Mutex, T> Cursor<'a, 'b, M, T> {
         Self {
             prev: inner.tail,
             next: core::ptr::null(),
-            inner, deque,
+            inner, queue: deque,
             _phantom: PhantomData,
+        }
+    }
+
+    fn get_prev_next(&self) -> (Option<&'a NodeInner<T>>, Option<&'a NodeInner<T>>) {
+        // Safety: As long as the queue is well formed, the following are true:
+        // * Pointer is properly aligned
+        // * Pointer is dereferenceable
+        // * Pointer points to a valid instance
+        // Since the mutex is held:
+        // * The memory the pointer points to will not be mutated
+        // The lifetime of 'a is while we have the mutable reference to the queue, which must be
+        // shorter than the time the mutex is held.
+        unsafe {
+            (self.prev.as_ref(), self.next.as_ref())
         }
     }
 
@@ -51,19 +65,12 @@ impl <'a, 'b, M: Mutex, T> Cursor<'a, 'b, M, T> {
         if node.attached() {
             return Err(Error::Attached);
         }
-        if !core::ptr::eq(self.deque, node.queue) {
+        if !core::ptr::eq(self.queue, node.queue) {
             return Err(Error::WrongQueue);
         }
         
         unsafe {
-            // Safety: As long as the queue is well formed, the following are true:
-            // * Pointer is properly aligned
-            // * Pointer is dereferenceable
-            // * Pointer points to a valid instance
-            // Since the mutex is held:
-            // * The memory the pointer points to will not be mutated
-            let next = self.next.as_ref();
-            let prev = self.prev.as_ref();
+            let (prev, next) = self.get_prev_next();
             
             // Safety: We won't move out of the reference
             let node_inner = &mut node.get_unchecked_mut().inner;
@@ -78,6 +85,38 @@ impl <'a, 'b, M: Mutex, T> Cursor<'a, 'b, M, T> {
         }
 
         Ok(())
+    }
+
+    /// Pop the node to the left of this cursor
+    pub fn pop<R>(&mut self, function: impl FnOnce(&mut T) -> R) -> Option<R> {
+        let (prev, _next) = self.get_prev_next();
+
+        if let Some(prev) = prev {
+            // Patch our pointers
+            self.prev = prev.data.borrow().next;
+
+            // Safety: The queue mutex is locked
+            unsafe { prev.detach(self.inner) };
+            
+            let mut data = prev.data.borrow_mut();
+            Some(function(&mut data.value))
+        } else {
+            // Nothing to pop
+            None
+        }
+    }
+
+    pub fn move_next(&mut self) -> bool {
+        let (_prev, next) = self.get_prev_next();
+
+        if let Some(next) = next {
+            self.prev = next;
+            self.next = next.data.borrow().next;
+
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -170,10 +209,10 @@ impl <'a, M: Mutex, T> DequeNode<'a, M, T> {
             inner: NodeInner {
                 data: NodeData {
                     value,
+                    attached: false,
                     next: core::ptr::null(),
                     prev: core::ptr::null(),
                 }.into(),
-                attached: false,
                 _pin: PhantomPinned,
             }
         }
@@ -181,36 +220,35 @@ impl <'a, M: Mutex, T> DequeNode<'a, M, T> {
 
     /// Return true if this node is currently in a queue.
     pub fn attached(&self) -> bool {
-        self.inner.attached
+        self.inner.data.borrow().attached
     }
 
     /// Detach this node from any queue it is in. This makes no changes if the node is not in a queue.
     pub fn detach(self: Pin<&mut Self>) {
-        self.queue.mutex.lock(|| {
-            if self.attached() {
-                let queue = self.queue;
-
-                unsafe {
-                    // Safety: We don't move out of the mutable reference
-                    let self_mut = self.get_unchecked_mut();
-                    let inner = &mut self_mut.inner;
-                    // Safety: Mutex is locked and we are well formed
-                    inner.detach(queue);
-                }
+        self.queue.mutex.lock(|| unsafe {
+            if !self.attached() {
+                return;
             }
+
+            let mut queue = self.queue.inner.borrow_mut();
+
+            // Safety: We don't move out of the mutable reference
+            let self_mut = self.get_unchecked_mut();
+            let inner = &mut self_mut.inner;
+
+            // Safety: Mutex is locked and we are well formed
+            inner.detach(&mut queue);
         });
     }
 
     /// Mutate the value stored in this node.
     pub fn mutate<R>(self: Pin<&mut Self>, function: impl FnOnce(&mut T) -> R) -> R {
-        self.queue.mutex.lock(|| {
-            unsafe {
-                // Safety: We don't move out of the mutable reference
-                let self_mut = self.get_unchecked_mut();
-                let inner = &mut self_mut.inner;
-                // Safety: Mutex is locked
-                inner.with_value(function)
-            }
+        self.queue.mutex.lock(|| unsafe {
+            // Safety: We don't move out of the mutable reference
+            let self_mut = self.get_unchecked_mut();
+            let inner = &mut self_mut.inner;
+            // Safety: Mutex is locked
+            inner.with_value(function)
         })
     }
 }
@@ -226,23 +264,23 @@ impl <'a, M: Mutex, T> Drop for DequeNode<'a, M, T> {
 /// element on the queue.
 struct NodeInner<T> {
     data: RefCell<NodeData<T>>,
-    attached: bool,
     _pin: PhantomPinned,
 }
 
 struct NodeData<T> {
     value: T,
+    attached: bool,
     next: *const NodeInner<T>,
     prev: *const NodeInner<T>,
 }
 
 impl <T> NodeInner<T> {
     /// Patch this node into a list. The queue mutex MUST be locked before calling.
-    pub unsafe fn attach(&mut self, queue: &mut DequeInner<T>, next: Option<&NodeInner<T>>, prev: Option<&NodeInner<T>>) {
-        self.attached = true;
-        queue.size += 1;
-
+    pub unsafe fn attach(&self, queue: &mut DequeInner<T>, next: Option<&NodeInner<T>>, prev: Option<&NodeInner<T>>) {
         let mut self_inner = self.data.borrow_mut();
+
+        self_inner.attached = true;
+        queue.size += 1;
 
         if let Some(prev) = prev {
             self_inner.prev = prev;
@@ -262,8 +300,7 @@ impl <T> NodeInner<T> {
     }
 
     /// Detach this node from it's queue. The queue mutex MUST be locked before calling.
-    pub unsafe fn detach<M: Mutex>(&mut self, queue: &Deque<M, T>) {
-        let mut queue = queue.inner.borrow_mut();
+    pub unsafe fn detach(&self, queue: &mut DequeInner<T>) {
         queue.size -= 1;
 
         let mut self_inner = self.data.borrow_mut();
@@ -295,13 +332,62 @@ impl <T> NodeInner<T> {
 
         self_inner.next = core::ptr::null();
         self_inner.prev = core::ptr::null();
-        self.attached = false;
+        self_inner.attached = false;
     }
 
     /// Call a function with the value stored inside this node. The queue mutex MUST be locked before calling if this node is attached.
     pub unsafe fn with_value<R>(&self, function: impl FnOnce(&mut T) -> R) -> R {
         let mut self_inner = self.data.borrow_mut();
         function(&mut self_inner.value)
+    }
+}
+
+
+impl <M: Mutex, T> Deque<M, T> where T: Copy {
+    /// Pop a node from the front of the queue.
+    pub fn pop_front_copy(&self) -> Option<T> {
+        self.with_cursor(Side::Front, |mut cursor| {
+            cursor.move_next();
+            cursor.pop(|v| *v)
+        })
+    }
+    /// Pop a node from the back of the queue.
+    pub fn pop_back_copy(&self) -> Option<T> {
+        self.with_cursor(Side::Back, |mut cursor| {
+            cursor.pop(|v| *v)
+        })
+    }
+}
+
+impl <M: Mutex, T> Deque<M, T> where T: Clone {
+    /// Pop a node from the front of the queue and clone its value.
+    pub fn pop_front_clone(&self) -> Option<T> {
+        self.with_cursor(Side::Front, |mut cursor| {
+            cursor.move_next();
+            cursor.pop(|v| v.clone())
+        })
+    }
+    /// Pop a node from the back of the queue and clone its value.
+    pub fn pop_back_clone(&self) -> Option<T> {
+        self.with_cursor(Side::Back, |mut cursor| {
+            cursor.pop(|v| v.clone())
+        })
+    }
+}
+
+impl <M: Mutex, T> Deque<M, Option<T>> {
+    /// Pop a node from the front of the queue and take its value replacing it with `None`.
+    pub fn take_front(&self) -> Option<Option<T>> {
+        self.with_cursor(Side::Front, |mut cursor| {
+            cursor.move_next();
+            cursor.pop(|v| v.take())
+        })
+    }
+    /// Pop a node from the back of the queue and take its value replacing it with `None`.
+    pub fn take_back(&self) -> Option<Option<T>> {
+        self.with_cursor(Side::Back, |mut cursor| {
+            cursor.pop(|v| v.take())
+        })
     }
 }
 
@@ -315,7 +401,6 @@ mod test {
     use std::prelude::rust_2021::*;
 
     #[test]
-    #[cfg(any())]
     fn queue_smoke() {
         let queue: Deque<NoopMutex, u32> = Default::default();
         assert_eq!(queue.len(), 0);
@@ -379,7 +464,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(any())]
     fn queue_many() {
         // Miri is too slow to run 1 items
         #[cfg(miri)]
